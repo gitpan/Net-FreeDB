@@ -1,0 +1,31 @@
+Net/FreeDB version 0.05
+=======================
+
+Net::FreeDB is an oo-based module to interface
+with FreeDB servers.  It also includes some basic
+cdrom methods to generate a cddbid and get the
+required disc information required for a FreeDB
+query call.  These cdrom-based methods are provided
+as both static and method calls.  Currently this
+functionality only works on Linux and Windows.  If
+you have an OS you'd like to add, please let me know.
+
+INSTALLATION
+
+To install this module type the following:
+
+   perl Makefile.PL
+   make
+   make test
+   make install
+
+DEPENDENCIES
+
+This module requires these other modules and libraries:
+
+	Net::Cmd:   2.12 or higher
+	CDDB::File: 1.01 or higher
+
+COPYRIGHT AND LICENCE
+
+Copyright (C) 2001 David Shultz <dshultz@cpan.org>
