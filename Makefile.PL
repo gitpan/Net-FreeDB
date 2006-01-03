@@ -3,11 +3,15 @@ use ExtUtils::MakeMaker;
 # the contents of the Makefile that is written.
 if ($^O =~ /linux/) {
         print "OS: $^O, copying XS file: ";
-        system("cp FreeDB.xs.linux FreeDB.xs");
+        system("cp FreeDB.xs.linux FreeDB.xs") && die "Copying failed\n";
+        print "1 file copied\n";
+} elsif ($^O =~ /freebsd/) {
+        print "OS: $^O, copying XS file: ";
+        system("cp FreeDB.xs.linux FreeDB.xs") && die "Copying failed\n";
         print "1 file copied\n";
 } elsif ($^O =~ /MSWin32/) {
         print "OS: $^O, copying XS file:";
-        system("copy FreeDB.xs.win32 FreeDB.xs");
+        system("copy FreeDB.xs.win32 FreeDB.xs") && die "Copying failed\n";
 } else {
         print "Unable to determine OS, Exiting\n";
         exit(0);
@@ -22,7 +26,7 @@ sub MY::libscan
  return '' 
         if($path =~ m:/(RCS|CVS|SCCS)/: ||
            $path =~ m:[~%]$: ||
-           $path =~ m:\.(orig|rej|nfs)$:
+           $path =~ m:\.(orig|rej|nfs|h)$:
           );
  $path;
 }
@@ -81,4 +85,5 @@ WriteMakefile(
     'INC'               => '-Ilib', # e.g., '-I/usr/include/other'
         # Un-comment this if you add C files to link with later:
     # 'OBJECT'          => '$(O_FILES)', # link all the C files too
+    'clean'		=> { 'FILES' => 'FreeDB.xs' },
 );

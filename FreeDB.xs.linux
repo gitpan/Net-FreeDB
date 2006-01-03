@@ -22,6 +22,8 @@ constant(char *name, int len, int arg)
 
 MODULE = Net::FreeDB		PACKAGE = Net::FreeDB		
 
+PROTOTYPES: ENABLE
+
 double
 constant(sv,arg)
     PREINIT:

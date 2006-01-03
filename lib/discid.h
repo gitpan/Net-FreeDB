@@ -37,6 +37,11 @@
 #include "linux.h"
 #endif //__linux__
 
+#ifdef __FreeBSD__
+#include <sys/cdio.h>
+#include "freebsd.h"
+#endif // __FreeBSD__
+
 #ifdef WIN32
 #include "win32.h"
 #endif //WIN32

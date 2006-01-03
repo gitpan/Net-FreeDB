@@ -28,7 +28,7 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw();
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 our $ERROR;
 sub AUTOLOAD {
@@ -265,7 +265,8 @@ __END__
 
 
 =head1 NAME
-  Net::FreeDB - Perl interface to freedb server(s)
+
+Net::FreeDB - Perl interface to freedb server(s)
 
 =head1 SYNOPSIS
 
@@ -402,13 +403,16 @@ print $cddb_file_object->id;
 
 =head1 AUTHOR
 	David Shultz E<lt>dshultz@cpan.orgE<gt>
+	Peter Pentchev E<lt>roam@ringlet.netE<gt>
 
 =head1 CREDITS
 	Jeremy D. Zawodny E<lt>jzawodn@users.sourceforge.netE<gt>
 	Pete Jordon E<lt>ramtops@users.sourceforge.netE<gt>
 
 =head1 COPYRIGHT
-	Copywright (c) 2002 David Shultz.  All rights reserved.
+	Copyright (c) 2002 David Shultz.
+	Copyright (c) 2005, 2006 Peter Pentchev.
+	All rights reserved.
 	This program is free software; you can redistribute it
 	and/or modify if under the same terms as Perl itself.
 

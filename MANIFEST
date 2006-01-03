@@ -6,6 +6,7 @@ Makefile.PL
 README
 TODO
 lib/discid.h
+lib/freebsd.h
 lib/linux.h
 lib/myaspi32.h
 lib/scsidefs.h
@@ -13,3 +14,4 @@ lib/toc.h
 lib/toctool.h
 lib/win32.h
 test.pl
+META.yml                                 Module meta-data (added by MakeMaker)

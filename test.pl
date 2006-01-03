@@ -17,7 +17,7 @@ ok(1); # If we made it this far, we're ok.
 # its man page ( perldoc Test ) for help writing this test script.
 
 #########################
-ok($cddb = new Net::FreeDB());
+ok($cddb = new Net::FreeDB('USER' => 'win32usr'));
 
 #########################
 ok($cddb->read('newage', '940a070c'));
@@ -38,6 +38,8 @@ ok($cddb->lscat());
 my $id;
 if ($^O =~ /MSWin32/) {
 	$id = $cddb->getdiscid(0);
+} elsif ($^O =~ /freebsd/) {
+	$id = $cddb->getdiscid('/dev/acd0');
 } else {
 	$id = $cddb->getdiscid('/dev/cdrom');
 }
@@ -47,6 +49,8 @@ ok($id);
 $id = undef;
 if ($^O =~ /MSWin32/) {
 	$id = Net::FreeDB::getdiscid(0);
+} elsif ($^O =~ /freebsd/) {
+	$id = Net::FreeDB::getdiscid('/dev/acd0');
 } else {
 	$id = Net::FreeDB::getdiscid('/dev/cdrom');
 }
@@ -56,6 +60,8 @@ ok($id);
 $id = undef;
 if ($^O =~ /MSWin32/) {
 	$id = Net::FreeDB::getdiscdata(0);
+} elsif ($^O =~ /freebsd/) {
+	$id = Net::FreeDB::getdiscdata('/dev/acd0');
 } else {
 	$id = Net::FreeDB::getdiscdata('/dev/cdrom');
 }
