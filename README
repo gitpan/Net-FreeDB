@@ -1,4 +1,4 @@
-Net/FreeDB version 0.05
+Net/FreeDB version 0.08
 =======================
 
 Net::FreeDB is an oo-based module to interface
@@ -25,6 +25,7 @@ This module requires these other modules and libraries:
 
 	Net::Cmd:   2.12 or higher
 	CDDB::File: 1.01 or higher
+	File::Temp: 0.05 or higher
 
 COPYRIGHT AND LICENCE
 

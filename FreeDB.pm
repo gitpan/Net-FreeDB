@@ -8,6 +8,7 @@ use Net::Cmd;
 use CDDB::File;
 use Carp;
 use Data::Dumper;
+use File::Temp;
 
 require Exporter;
 require DynaLoader;
@@ -28,7 +29,7 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw();
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 our $ERROR;
 sub AUTOLOAD {
@@ -137,9 +138,18 @@ sub read {
 	    return undef;
 	}
     }
-    my $cddb_file = new CDDB::File;
-    $cddb_file->{_data} =
-	$self->_READ($cat, $id) ? $self->_read : undef;
+
+    # First, fetch the data, before creating any temporary files
+    my $data = $self->_READ($cat, $id)? $self->_read(): undef;
+    return undef unless defined $data;
+    
+    # Create a file for CDDB::File to use...
+    my $fh = new File::Temp;
+    print $fh join '', @$data;
+    seek $fh, 0, 0;
+
+    # ...and use it.
+    my $cddb_file = new CDDB::File($fh->filename());
     return $cddb_file;
 }
 

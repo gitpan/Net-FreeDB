@@ -74,6 +74,7 @@ WriteMakefile(
     'VERSION_FROM'      => 'FreeDB.pm', # finds $VERSION
     'PREREQ_PM'         => {Net::Cmd => 2.12,
 			    CDDB::File => 1.01,
+			    File::Temp => 0.05,
 			   }, # e.g., Module::Name => 1.1
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (AUTHOR     => 'David Shultz <dshultz@cpan.org>',

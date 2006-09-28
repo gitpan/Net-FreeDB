@@ -40,7 +40,6 @@ constant(sv,arg)
 char*
 discid(char* dev)
     INIT:
-		int i;
 		char id[30];
 		struct discdata data;
     CODE:
