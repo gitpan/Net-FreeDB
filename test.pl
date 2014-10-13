@@ -7,15 +7,13 @@
 
 use Test;
 use Data::Dumper;
-BEGIN { plan tests => 10 };
+BEGIN { plan tests => ($ENV{HAVE_INTERNET} ? 10 : 1) };
 use Net::FreeDB;
 ok(1); # If we made it this far, we're ok.
 
 #########################
 
-# Insert your test code below, the Test module is use()ed here so read
-# its man page ( perldoc Test ) for help writing this test script.
-
+if ($ENV{HAVE_INTERNET}) {
 #########################
 ok($cddb = new Net::FreeDB('USER' => 'win32usr'));
 
@@ -51,8 +49,7 @@ if ($^O =~ /MSWin32/) {
 	$id = Net::FreeDB::getdiscid(0);
 } elsif ($^O =~ /freebsd/) {
 	$id = Net::FreeDB::getdiscid('/dev/acd0');
-} else {
-	$id = Net::FreeDB::getdiscid('/dev/cdrom');
+} else { $id = Net::FreeDB::getdiscid('/dev/cdrom');
 }
 ok($id);
 
@@ -67,3 +64,4 @@ if ($^O =~ /MSWin32/) {
 }
 
 ok($id->{NUM_TRKS});
+}

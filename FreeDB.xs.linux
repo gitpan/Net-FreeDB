@@ -48,7 +48,7 @@ discid(char* dev)
 		if (data.num_of_trks == -1) {
 			RETVAL = "";
 		} else {
-			sprintf(id, "%08x", data.discid);
+			sprintf(id, "%08x", (unsigned int)data.discid);
 			RETVAL = id;
 		}
     OUTPUT:
@@ -69,7 +69,7 @@ discinfo(char* dev)
 		av_push(tracks, newSVnv(data.track_offsets[i]));
 	}
 	
-	sprintf(id, "%08x", data.discid);
+	sprintf(id, "%08x", (unsigned int)data.discid);
 	hv_store(hash, "ID", 2, newSVpv(id, 0), 0);
 	hv_store(hash, "NUM_TRKS", 8, newSVnv(data.num_of_trks), 0);
 	hv_store(hash, "TRACKS", 6, newRV_inc((SV*)tracks), 0);

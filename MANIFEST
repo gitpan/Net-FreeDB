@@ -16,3 +16,4 @@ lib/toctool.h
 lib/win32.h
 test.pl
 META.yml                                 Module meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

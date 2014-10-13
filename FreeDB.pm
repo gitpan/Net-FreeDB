@@ -29,7 +29,7 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw();
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 our $ERROR;
 sub AUTOLOAD {
@@ -297,6 +297,8 @@ print $cddb_file_object->id;
 
 =head2 METHODS
 
+=over
+
 =item new(HOST => $h, PORT => $p, USER => $u, HOSTNAME => $hn, TIMEOUT => $to)
 
      Constructor:
@@ -399,6 +401,8 @@ print $cddb_file_object->id;
    }
 
    NOTE: A different return type/design may be developed.
+
+=back
 
 =head1 BUGS
 

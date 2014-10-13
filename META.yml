@@ -1,13 +1,24 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         Net-FreeDB
-version:      0.08
-version_from: FreeDB.pm
-installdirs:  site
+---
+abstract: 'OOP Interface to FreeDB Server(s)'
+author:
+  - 'David Shultz <dshultz@cpan.org>'
+build_requires:
+  ExtUtils::MakeMaker: 0
+configure_requires:
+  ExtUtils::MakeMaker: 0
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 6.84, CPAN::Meta::Converter version 2.133380'
+license: unknown
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Net-FreeDB
+no_index:
+  directory:
+    - t
+    - inc
 requires:
-    CDDB::File:                    1.01
-    File::Temp:                    0.05
-    Net::Cmd:                      2.12
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.30
+  CDDB::File: 1.01
+  File::Temp: 0.05
+  Net::Cmd: 2.12
+version: 0.09

@@ -37,10 +37,10 @@
 #include "linux.h"
 #endif //__linux__
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
 #include <sys/cdio.h>
 #include "freebsd.h"
-#endif // __FreeBSD__
+#endif // __FreeBSD__ || __FreeBSD_kernel__
 
 #ifdef WIN32
 #include "win32.h"
