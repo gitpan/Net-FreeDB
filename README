@@ -1,14 +1,15 @@
-Net/FreeDB version 0.08
+Net/FreeDB version 0.10
 =======================
 
 Net::FreeDB is an oo-based module to interface
-with FreeDB servers.  It also includes some basic
-cdrom methods to generate a cddbid and get the
+with FreeDB servers. As of version 0.10, Net::FreeDB
+is CDDB Protocol Level 6 compliant. It also includes
+some basic cdrom methods to generate a cddbid and get the
 required disc information required for a FreeDB
-query call.  These cdrom-based methods are provided
+query call. These cdrom-based methods are provided
 as both static and method calls.  Currently this
-functionality only works on Linux and Windows.  If
-you have an OS you'd like to add, please let me know.
+functionality only works on Linux, FreeBSD and Windows.
+If you have an OS you'd like to add, please let me know.
 
 INSTALLATION
 
@@ -23,9 +24,11 @@ DEPENDENCIES
 
 This module requires these other modules and libraries:
 
-	Net::Cmd:   2.12 or higher
-	CDDB::File: 1.01 or higher
-	File::Temp: 0.05 or higher
+    Moo:                any version
+    Net::Cmd:           2.12 or higher
+    IO::Socket::INET:   any version
+    CDDB::File:         1.01 or higher
+    File::Temp:         0.05 or higher
 
 COPYRIGHT AND LICENCE
 

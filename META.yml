@@ -1,7 +1,7 @@
 ---
 abstract: 'OOP Interface to FreeDB Server(s)'
 author:
-  - 'David Shultz <dshultz@cpan.org>'
+  - 'David Shultz <dshultz@cpan.org>, Peter Pentchev <roam@ringlet.net>'
 build_requires:
   ExtUtils::MakeMaker: 0
 configure_requires:
@@ -20,5 +20,7 @@ no_index:
 requires:
   CDDB::File: 1.01
   File::Temp: 0.05
+  IO::Socket::INET: 0
+  Moo: 0
   Net::Cmd: 2.12
-version: 0.09
+version: 0.10

@@ -1,3 +1,8 @@
+ /*********************************************
+NAME: myaspi32.h
+FUNCTION: windows aspi methods and constants
+*********************************************/
+
 #ifndef __MYASPI32_H_
 #define __MYASPI32_H_
 

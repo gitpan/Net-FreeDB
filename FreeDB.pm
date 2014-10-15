@@ -1,276 +1,410 @@
 package Net::FreeDB;
 
-use 5.006;
-use strict;
-use warnings;
-use IO::Socket;
-use Net::Cmd;
+use Moo;
+use Net::FreeDBConnection;
+use Net::Cmd qw/CMD_OK CMD_MORE/;
 use CDDB::File;
-use Carp;
-use Data::Dumper;
 use File::Temp;
 
-require Exporter;
+has hostname               => (is => 'ro', default => $ENV{HOSTNAME} // 'unknown');
+has remote_host            => (is => 'rw', default => 'freedb.freedb.org');
+has remote_port            => (is => 'rw', default => 8880);
+has user                   => (is => 'rw', default => $ENV{USER} // 'unknown');
+has timeout                => (is => 'rw', default => 120);
+has debug                  => (is => 'rw', default => 0);
+has current_protocol_level => (is => 'rw');
+has max_protocol_level     => (is => 'rw');
+has obj                    => (is => 'rw', lazy => 1, builder => '_create_obj');
+has error                  => (is => 'rw');
+
 require DynaLoader;
-use AutoLoader;
+extends 'DynaLoader';
 
-our @ISA = qw(Exporter DynaLoader Net::Cmd IO::Socket::INET);
-
-# Items to export into callers namespace by default. Note: do not export
-# names by default without a very good reason. Use EXPORT_OK instead.
-# Do not simply export all your public functions/methods/constants.
-
-# This allows declaration	use Net::FreeDB ':all';
-# If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
-# will save memory.
-our %EXPORT_TAGS = ( 'all' => [ qw() ] );
-
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-
-our @EXPORT = qw();
-
-our $VERSION = '0.09';
-
-our $ERROR;
-sub AUTOLOAD {
-    # This AUTOLOAD is used to 'autoload' constants from the constant()
-    # XS function.  If a constant is not found then control is passed
-    # to the AUTOLOAD in AutoLoader.
-
-    my $constname;
-    our $AUTOLOAD;
-    ($constname = $AUTOLOAD) =~ s/.*:://;
-    croak "& not defined" if $constname eq 'constant';
-    my $val = constant($constname, @_ ? $_[0] : 0);
-    if ($! != 0) {
-	if ($! =~ /Invalid/ || $!{EINVAL}) {
-	    $AutoLoader::AUTOLOAD = $AUTOLOAD;
-	    goto &AutoLoader::AUTOLOAD;
-	}
-	else {
-	    croak "Your vendor has not defined Net::FreeDB macro $constname";
-	}
-    }
-    {
-	no strict 'refs';
-	# Fixed between 5.005_53 and 5.005_61
-	if ($] >= 5.00561) {
-	    *$AUTOLOAD = sub () { $val };
-	}
-	else {
-	    *$AUTOLOAD = sub { $val };
-	}
-    }
-    goto &$AUTOLOAD;
-}
-
+our $VERSION = '0.10';
 bootstrap Net::FreeDB $VERSION;
 
-# Preloaded methods go here.
-sub new {
-    my $class = shift;
-    my $self = {};
-    $self = {@_};
-    bless($self, $class);
+sub _create_obj
+{
+    my $self = shift;
+    my $obj = Net::FreeDBConnection->new(
+        PeerAddr => $self->remote_host,
+        PeerPort => $self->remote_port,
+        Proto    => 'tcp',
+        Timeout  => $self->timeout,
+    );
 
-    $self->{HOST} = 'freedb.freedb.org' unless defined($self->{HOST});
-    $self->{PORT} = '8880' unless defined($self->{PORT});
+    if ($obj) {
+        my $res = $obj->response();
 
-    if (!defined($self->{USER})) {
-	$self->{USER} = defined($ENV{USER}) ? $ENV{USER} : 'unknown';
+        if ($res == CMD_OK) {
+            $obj->debug($self->debug);
+            if ($obj->command(join(' ', ("CDDB HELLO ", $self->user, $self->hostname, ref($self), $self->VERSION)))) {
+                my $response_code = $obj->response();
+                if ($response_code != CMD_OK) {
+                    $self->error($obj->message());
+                }
+            }
+        } else {
+            $obj = undef;
+        }
     }
 
-    if (!defined($self->{HOSTNAME})) {
-	$self->{HOSTNAME} = defined($ENV{HOSTNAME}) ? $ENV{HOSTNAME} : 'unknown';
-    }
-
-    my $obj = $self->SUPER::new(PeerAddr => $self->{HOST},
-				PeerPort => $self->{PORT},
-				Proto    => 'tcp',
-				Timeout  =>
-				defined($self->{TIMEOUT}) ? $self->{TIMEOUT} : 120
-			       );
-
-    return undef
-      unless defined $obj;
-
-    $obj->autoflush(1);
-    $obj->debug(exists $self->{DEBUG} ? $self->{DEBUG} : undef);
-
-    unless ($obj->response() == CMD_OK) {
-	$obj->close;
-	return undef;
-    }
-
-    $obj->command(
-		  "cddb hello",
-		  $self->{USER},
-		  $self->{HOSTNAME},
-		  ref($self),
-		  $VERSION
-		 );
-
-    unless ($obj->response() == CMD_OK) {
-	$obj->close;
-	return undef;
-    }
-
-    $obj;
+    return $obj;
 }
 
-sub read {
+sub lscat
+{
     my $self = shift;
-    my ($cat, $id);
+    my @categories = ();
 
-    if (scalar(@_) == 2) {
-	($cat, $id) = @_;
-    } else {
-	if ((scalar(@_) % 2) == 0) {
-	    if ($_[0] =~ /^CATEGORY$/i || $_[0] =~ /^ID$/i) {
-		my %input = @_;
-		($cat, $id) = ($input{CATEGORY}, $input{ID});
-	    } else {
-		print "Error: Unknown input!\n";
-		return undef;
-	    }
-	} else {
-	    print "Error: Unknown input!\n";
-	    return undef;
-	}
+    if ($self->_run_command('CDDB LSCAT') == CMD_OK) {
+        my $data = $self->_read();
+        if ($data) {
+            map { my $line = $_; chomp($line); push @categories, $line; } @$data;
+        }
     }
 
-    # First, fetch the data, before creating any temporary files
-    my $data = $self->_READ($cat, $id)? $self->_read(): undef;
-    return undef unless defined $data;
-    
-    # Create a file for CDDB::File to use...
-    my $fh = new File::Temp;
-    print $fh join '', @$data;
-    seek $fh, 0, 0;
-
-    # ...and use it.
-    my $cddb_file = new CDDB::File($fh->filename());
-    return $cddb_file;
+    return @categories;
 }
 
-sub query {
+sub query
+{
     my $self = shift;
-    $self->_QUERY(@_) ? $self->_query : undef;
-}
+    my @results = ();
 
-sub sites {
-    my $self = shift;
-    $self->_SITES ? $self->_sites : undef;
-}
-
-sub getdiscid {
-    my $self = shift;
-	my ($driveNo, $id);
-	if (ref($self) ne 'Net::FreeDB') {
-		$driveNo = $self;
-	} else {
-		$driveNo = shift;
-	}
-	$id = discid($driveNo);
-    if ($id eq "UNDEF" || $id eq '') {
-	$ERROR = "Drive Error: no disc found\n";
-	return undef;
+    if ($self->_run_command('CDDB QUERY', @_) == CMD_OK) {
+        if ($self->obj->code() == 200) {
+            my $data = $self->obj->message();
+            push @results, _query_line_to_hash($data);
+        } elsif ($self->obj->code() == 211) {
+            my $lines = $self->_read();
+            foreach my $line (@$lines) {
+                push @results, _query_line_to_hash($line);
+            }
+        }
     }
-    return $id;
+
+    return @results;
 }
 
-sub getdiscdata {
+sub read
+{
     my $self = shift;
-    my ($driveNo, $data);
-	if (ref($self) ne 'Net::FreeDB') {
-		$driveNo = $self;
-	} else {
-		$driveNo = shift;
-	}
-	$data = discinfo($driveNo);
-    if (!$data) {
-	$ERROR = "Drive Error: no disc found\n";
-	return undef;
+    my $result = undef;
+
+    if ($self->_run_command('CDDB READ', @_) == CMD_OK) {
+        my $data = $self->_read();
+        my $fh = File::Temp->new();
+        print $fh join('', @$data);
+        seek($fh, 0, 0);
+        my $cddb_file_obj = CDDB::File->new($fh->filename);
+        $fh->close;
+        $result = $cddb_file_obj;
     }
+
+    return $result;
+}
+
+sub unlink
+{
+    my $self = shift;
+    my $response = undef;
+
+    if ($self->_run_command('CDDB UNLINK', @_) == CMD_OK) {
+        $response = 1;
+    }
+
+    return $response;
+}
+
+sub write
+{
+    my $self = shift;
+    my $response = undef;
+    my $category = shift;
+    my $disc_id  = shift;
+
+    if ($self->_run_command('CDDB WRITE', $category, $disc_id) == CMD_MORE) {
+        if ($self->_run_command(@_, ".\n") == CMD_OK) {
+            $response = 1;
+        }
+    }
+
+    return $response;
+}
+
+sub discid
+{
+    my $self = shift;
+    my $response = undef;
+
+    if ($self->_run_command('DISCID', @_) == CMD_OK) {
+        $response = $self->obj->message();
+        chomp($response);
+        my (undef, undef, undef, $disc_id) = split(/\s/, $response);
+        $response = $disc_id;
+    }
+
+    return $response;
+}
+
+sub get
+{
+    my $self = shift;
+    my $filename = shift;
+    my $file_contents = undef;
+
+    if ($self->_run_command('GET', $filename) == CMD_OK) {
+        $file_contents = $self->_read();
+    }
+
+    return $file_contents;
+}
+
+sub log
+{
+    my $self = shift;
+    my @log_lines = ();
+
+    if ($self->_run_command('LOG -l', @_) == CMD_OK) {
+        my $lines = $self->_read();
+        foreach my $line (@$lines) {
+            chomp($line);
+            push @log_lines, $line;
+        }
+    }
+
+    return @log_lines;
+}
+
+sub motd
+{
+    my $self = shift;
+    my @motd = ();
+
+    if ($self->_run_command('MOTD') == CMD_OK) {
+        push @motd, $self->obj->message();
+        my $lines = $self->_read();
+        foreach my $line (@$lines) {
+            chomp($line);
+            push @motd, $line;
+        }
+    }
+
+    return @motd;
+}
+
+sub proto
+{
+    my $self = shift;
+    my ($current_level, $max_level);
+
+    if ($self->_run_command("PROTO", @_) == CMD_OK) {
+        my $message = $self->obj->message();
+        if ($message =~ /OK/) {
+            $message =~ /OK, CDDB protocol level now: (\d)/;
+            $self->current_protocol_level($1);
+        } else {
+            $message =~ /CDDB protocol level: current (\d), supported (\d)/;
+            $self->current_protocol_level($1);
+            $self->max_protocol_level($2);
+        }
+    }
+
+    return $self->current_protocol_level();
+}
+
+
+sub put
+{
+    my $self = shift;
+    my $type = shift;
+
+    if ($self->_run_command('PUT', $type) == CMD_MORE) {
+        $self->obj->datasend(@_);
+    }
+}
+
+sub quit
+{
+    my $self = shift;
+    $self->_run_command('QUIT');
+}
+
+sub sites
+{
+    my $self = shift;
+    my @sites = ();
+
+    if ($self->_run_command('SITES') == CMD_OK) {
+        my $lines = $self->_read();
+        foreach my $line (@$lines) {
+            chomp($line);
+            my ($hostname, $port, $latitude, $longitude, $description) = split(/\s/, $line, 5);
+            push @sites, {
+                hostname    => $hostname,
+                port        => $port,
+                latitude    => $latitude,
+                longitude   => $longitude,
+                description => $description,
+            };
+        }
+    }
+
+    return @sites;
+}
+
+sub stat
+{
+    my $self = shift;
+    my $response = {};
+
+    if ($self->_run_command('STAT') == CMD_OK) {
+        my $lines = $self->_read();
+        foreach my $line (@$lines) {
+            chomp($line);
+            my ($key, $value) = split(/:/, $line);
+            if ($key && $value) {
+                $key =~ s/\s*(.+)\s*/$1/;
+                $value =~ s/\s*(.+)\s*/$1/;
+                $response->{$key} = $value;
+            }
+        }
+    }
+
+    return $response;
+}
+
+sub update
+{
+    my $self = shift;
+    my $response = undef;
+
+    if ($self->_run_command('UPDATE') == CMD_OK) {
+        $response = 1;
+    }
+
+    return $response;
+}
+
+sub validate
+{
+    my $self = shift;
+    my $response = undef;
+
+    if ($self->_run_command('VALIDATE') == CMD_MORE) {
+        if ($self->run_command(@_ . "\n") == CMD_OK) {
+            $response = 1;
+        }
+    }
+
+    return $response;
+}
+
+sub ver
+{
+    my $self = shift;
+    my $response = undef;
+
+    if ($self->_run_command('VER') == CMD_OK) {
+        $response = $self->obj->message();
+    }
+
+    return $response;
+}
+
+sub whom
+{
+    my $self = shift;
+    my @users = ();
+
+    if ($self->_run_command('WHOM') == CMD_OK) {
+        my $lines = $self->_read();
+        foreach my $line (@$lines) {
+            chomp($line);
+            push @users, $line;
+        }
+    }
+
+    return @users;
+}
+
+sub get_local_disc_id
+{
+    my $self = shift;
+    my $device = shift;
+    my $disc_id = undef;
+
+    if ($device) {
+        $disc_id = xs_discid($device);
+        if ($disc_id eq 'UNDEF' || $disc_id eq '') {
+            $self->error('Drive Error: no disc found');
+            $disc_id = undef;
+        }
+    }
+
+    return $disc_id;
+}
+
+sub get_local_disc_data
+{
+    my $self = shift;
+    my $device = shift;
+    my $disc_data = undef;
+
+    if ($device) {
+        $disc_data = xs_discinfo($device);
+        if (!$disc_data) {
+            $self->error('Drive Error: no disc found');
+        }
+    }
+
+    return $disc_data;
+}
+
+sub _read
+{
+    my $self = shift;
+    my $data = $self->obj->read_until_dot
+        or return undef;
+
     return $data;
 }
 
-sub lscat {
-    my $self = shift;
-    $self->_LSCAT();
-}
-sub quit {
-    my $self = shift;
-    $self->_QUIT();
-}
+sub _query_line_to_hash
+{
+    my $line = shift;
+    chomp($line);
+    my ($category, $disc_id, $the_rest) = split(/\s/, $line, 3);
+    my ($artist, $album) = split(/\s\/\s/, $the_rest);
 
-sub DESTROY {
-    my $self = shift;
-    $self = {};
-}
-
-sub _read {
-    my $self = shift;
-    my $data = $self->read_until_dot or
-      return undef;
-    return $data;
+    return {
+        Category => $category,
+        DiscID   => $disc_id,
+        Artist   => $artist,
+        Album    => $album,
+    };
 }
 
-sub _query {
-    my $self = shift;
-    my $data = $self->message();
-	my $code = $self->code();
-	my @returns;
-	if ($code == 210 || $code == 211) {
+sub _run_command
+{
+    my ($self, @arguments) = @_;
 
-
-		my $data = $self->read_until_dot
-			or return undef;
-		foreach my $i (@{$data}) {
-			next if $i =~ /^\.$/;
-			$i =~
-				/([^\s]+)\s([^\s]+)\s([^\/|\:|\-]+)\s[\/|\|:|\-]\s?(.*)\s?/;
-			push @returns, {GENRE =>$1,DISCID =>$2,ARTIST=>$3,ALBUM=>$4};
-		}
-	} else {
-		#we got a single; parse it, hash it and return it
-    	$data =~ /([^\s]+)\s([^\s]+)\s([^\/|\:|\-]+)\s[\/|\:|\-]\s?(.*)\s?/;
-		push @returns, {GENRE=>$1,DISCID=>$2,ARTIST=>$3,ALBUM=>$4};
-	}
-	return @returns;
-}
-
-sub _sites {
-    my $self = shift;
-    my $data = $self->read_until_dot
-		or return undef;
-    my @sites;
-    foreach (@$data) {
-	s/([^\s]+)\s([^\s]+).*/$1 $2/;
-	push(@sites, $_);
+    my $response_code = undef;
+    if ($self->obj->command(@arguments)) {
+        $response_code = $self->obj->response();
+        if ($response_code != CMD_OK) {
+            my $error = $self->obj->message();
+            chomp($error);
+            $self->error($error);
+        } 
     }
-    return \@sites;
+
+    return $response_code;
 }
-
-sub _READ      { shift->command('CDDB READ',@_)->response == CMD_OK }
-sub _SITES     { shift->command('SITES',@_)->response == CMD_OK }
-sub _LSCAT     { shift->command('CDDB LSCAT')->response == CMD_OK }
-sub _QUERY     { shift->command('CDDB QUERY',@_)->response == CMD_OK }
-sub _QUIT      { shift->command('QUIT')->response == CMD_OK }
-
-sub _WRITE     { shift->command('CDDB WRITE',@_)->response == CMD_OK }
-sub _WHOM      { shift->command('CDDB WHOM')->response == CMD_OK }
-sub _UPDATE    { shift->command('CDDB UPDATE')->response == CMD_OK }
-sub _VER       { shift->command('CDDB VER')->response == CMD_OK }
-sub _STAT      { shift->command('CDDB STAT')->response == CMD_OK }
-sub _PROTO     { shift->command('CDDB PROTO')->response == CMD_OK }
-sub _MOTD      { shift->command('CDDB MOTD')->response == CMD_OK }
-sub _LOG       { shift->command('CDDB LOG',@_)->response == CMD_OK }
-sub _HELP      { shift->command('CDDB HELP')->response == CMD_OK }
-sub _DISCID    { shift->command('DISCID',@_)->response == CMD_OK }
-
 
 1;
+
 __END__
 
 
@@ -281,14 +415,14 @@ Net::FreeDB - Perl interface to freedb server(s)
 =head1 SYNOPSIS
 
     use Net::FreeDB;
-$freedb = Net::FreeDB->new();
-$discdata = $freedb->getdiscdata('/dev/cdrom');
-my $cddb_file_object = $freedb->read('rock', $discdata->{ID});
-print $cddb_file_object->id;
+    $freedb = Net::FreeDB->new();
+    $discdata = $freedb->getdiscdata('/dev/cdrom');
+    my $cddb_file_object = $freedb->read('rock', $discdata->{ID});
+    print $cddb_file_object->id;
 
 =head1 DESCRIPTION
 
-  Net::FreeDB was inspired by Net::CDDB.  And in-fact
+    Net::FreeDB was inspired by Net::CDDB.  And in-fact
     was designed as a replacement in-part by Net::CDDB's
     author Jeremy D. Zawodny.  Net::FreeDB allows an
     oop interface to the freedb server(s) as well as
@@ -299,41 +433,28 @@ print $cddb_file_object->id;
 
 =over
 
-=item new(HOST => $h, PORT => $p, USER => $u, HOSTNAME => $hn, TIMEOUT => $to)
+=item new(remote_host => $h, remote_port => $p, user => $u, hostname => $hn, timeout => $to)
 
      Constructor:
         Creates a new Net::FreeDB object.
 
      Parameters:
-          Set to username or user-string you'd like to be logged as.
+          Set to username or user-string you'd like to be logged as. Defaults to $ENV{USER}
 
         HOSTNAME: (optional)
-          Set to the hostname you'd like to be known as.
+          Set to the hostname you'd like to be known as. Defaults to $ENV{HOSTNAME}
 
         TIMEOUT: (optional)
-          Set to the number of seconds to timeout on freedb server.
+          Set to the number of seconds to timeout on freedb server. Defaults to 120
 
 
     new() creates and returns a new Net::FreeDB object that is connected
     to either the given host or freedb.freedb.org as default.
 
-=item read($cat, $id)
+=item lscat
 
-  Parameters:
-
-    read($$) takes 2 parameters, the first being a category name.
-    This can be any string either that you make up yourself or
-    that you believe the disc to be. The second is the disc id. This
-    may be generated for the current cd in your drive by calling getdiscid()
-
-  NOTE:
-    Using an incorrect category will result in either no return or an
-    incorrect return. Please check the CDDB::File documentation for
-	information on this module.
-
-
-  read() requests a freedb record for the given information and returns a
-    CDDB::File object.
+    Returns a list of all available categories on the server.
+    Sets $obj->error on error
 
 =item query($id, $num_trks, $trk_offset1, $trk_offset2, $trk_offset3...)
 
@@ -349,15 +470,127 @@ print $cddb_file_object->id;
 
     query() returns an array of hashes. The hashes looks like:
 
-	{
-		GENRE  => 'newage',
-		DISCID => 'discid',
-		ARTIST => 'artist',
-		ALBUM  => 'title'
-	}
+    {
+        Category => 'newage',
+        DiscID   => 'discid',
+        Artist   => 'artist',
+        Album    => 'title'
+    }
 
-	NOTE: query() can return 'inexact' matches and/or 'multiple exact'
-	matches. The returned array is the given returned match(es).
+    Sets $obj->error on error
+
+    NOTE: query() can return 'inexact' matches and/or 'multiple exact'
+    matches. The returned array is the given returned match(es).
+
+=item read($server_category_string, $disc_id)
+
+  Parameters:
+
+    read($$) takes 2 parameters, the first being a server category name.
+    This can be any string either that you make up yourself or
+    that you believe the disc to be. The second is the disc id. This
+    may be generated for the current cd in your drive by calling get_local_disc_id()
+
+    Sets $obj->error on error
+
+  NOTE:
+    Using an incorrect category will result in either no return or an
+    incorrect return. Please check the CDDB::File documentation for
+    information on this module.
+
+  read() requests a freedb record for the given information and returns a
+    CDDB::File object.
+
+=item unlink($server_category_string, $disc_id)
+
+    Parameters:
+
+    1: a server category name
+    2: a valid disc_id
+
+    This will delete the given entry on the server (if you have permission).
+    Check the docs for the read() method to get more information on the parameters.
+
+    Sets $obj->error on error.
+
+=item write($server_category_string, $disc_id, $cddb_formatted_data)
+
+    Parameters:
+
+    1: a server category name
+    2: a valid disc_id
+    3: a properly formatted array of lines from a cddb file
+
+    Returns true on success, otherwise $obj->error will be set.
+
+=item discid($number_of_tracks, $track_1_offset, $track_2_offset, ..., $total_number_of_seconds_of_disc)
+
+    Parameters:
+
+    1: The total number of tracks of the current disc
+    2: An array of the track offsets in seconds
+    3: The total number of seconds of the disc.
+
+    Returns a valid disc_id if found, otherwise $obj->error will be set.
+
+=item get($filename)
+
+    Parameters:
+
+    1: The filename to retrieve from the server.
+
+    Returns a scalar containing raw file contents. Returns $obj->error on error.
+
+
+=item log($number_of_lines_per_section, start_date, end_date, 'day', $number_of_days, 'get')
+
+    Parameters:
+
+    1: The number of lines per section desired
+    2: (Optional) A date after which statistics should be calculated in the format of hh[mm[ss[MM[DD[[CC]YY]]]]]
+    3: (Optional) Must pass a start_date if passing this. A date after start date at which time statistics
+        to not be calculated in the format of hh[mm[ss[MM[DD[[CC]YY]]]]]
+    4: (Optional) The string 'day' to indicate that statistics should be calcuated for today.
+    5: (Optional) A number of days to be calculated, default is 1
+    6: (Optional) The string 'get' which will cause the log data to be recorded on the server's machine.
+
+    NOTE: You must provide at least one of the optional options (2,3,4).
+    Sets $obj->error on error.
+
+=item motd
+
+    Parameters:
+        None
+
+    Returns the message of the day as a string.
+    Sets $obj->error on error.
+
+=item proto($desired_protocol_level)
+
+    Parameters: (Optional) The desired protocol level as a number.
+
+    When called with NO parameters, will set the current and maximum allowed procotol levels,
+    when called with a desired protocol level it will be set, $obj->errror will be set if an error occurs.
+
+    Returns the currently selected protocol level.
+
+=item put($type, $file)
+
+    Parameters:
+
+    1: type is either sites or motd
+    2: based on param 1, an array of lines, either a list of mirror sites
+        or a new message of the day
+
+    Assuming you have permission to do so the server content will be updated.
+    Sets $obj->error on error.
+
+=item quit
+
+    Parameters:
+        None
+
+    Disconnects from the server.
 
 =item sites()
 
@@ -365,9 +598,84 @@ print $cddb_file_object->id;
     None
 
     sites() returns an array reference of urls that can be used as 
-    a new HOST.
+    a new remote_host.
 
-=item getdiscid($device)
+=item stat
+
+    Parameters:
+        None
+
+    Returns undef on error (and sets $obj->error). Otherwise returns a hashref
+        where the keys/values are:
+
+        max proto => <current_level>
+            An integer representing the server's current operating protocol level.
+
+        gets => <yes | no>
+            The maximum protocol level.
+
+        updates => <yes | no>
+            Whether or not the client is allowed to initiate a database update.
+
+        posting => <yes | no>
+            Whether or not the client is allowed to post new entries.
+
+        quotes => <yes | no>
+            Whether or not quoted arguments are enabled.
+
+        current users => <num_users>
+            The number of users currently connected to the server.
+
+        max users => <num_max_users>
+            The number of users that can concurrently connect to the server.
+
+        strip ext => <yes | no>
+            Whether or not extended data is stripped by the server before presented to the user.
+
+        Database entries => <num_db_entries>
+            The total number of entries in the database.
+
+        <category_name => <num_db_entries>
+            The total number of entries in the database by category.
+
+=item update
+
+    Parameters:
+
+    None
+
+    Tells the server to update the database (if you have permission).
+    Sets $obj->error on error.
+
+=item validate($validating_string)
+
+    Parameters:
+
+    1: A string to be validated.
+
+    If you have permission, given a string the server will validate the string
+    as valid for use in a write call or not.
+
+    Sets $obj->error on error.
+
+=item ver
+
+    Parameters:
+
+    None
+
+    Returns a string of the server's version.
+
+=item whom
+
+    Parameters:
+
+    None
+
+    If you have permission, returns a list of usernames of all connected users.
+    Sets $obj->error on error.
+
+=item get_local_disc_id
 
   Parameters:
     getdiscid($) takes the device you want to use.
@@ -380,7 +688,7 @@ print $cddb_file_object->id;
 
     NOTE: See BUGS
 
-=item getdiscdata($device)
+=item get_local_disc_data
 
   Parameters:
     getdiscdata($) takes the device you want to use. See getdiscid()
@@ -415,26 +723,24 @@ print $cddb_file_object->id;
         giving the correct drive number will return in an
         accurate return.
 
+=head1 Resources
+    The current version of the CDDB Server Protocol can be
+    found at: http://ftp.freedb.org/pub/freedb/latest/CDDBPROTO
+
 =head1 AUTHOR
-	David Shultz E<lt>dshultz@cpan.orgE<gt>
-	Peter Pentchev E<lt>roam@ringlet.netE<gt>
+    David Shultz E<lt>dshultz@cpan.orgE<gt>
+    Peter Pentchev E<lt>roam@ringlet.netE<gt>
 
 =head1 CREDITS
-	Jeremy D. Zawodny E<lt>jzawodn@users.sourceforge.netE<gt>
-	Pete Jordon E<lt>ramtops@users.sourceforge.netE<gt>
+    Jeremy D. Zawodny E<lt>jzawodn@users.sourceforge.netE<gt>
+    Pete Jordon E<lt>ramtops@users.sourceforge.netE<gt>
 
 =head1 COPYRIGHT
-	Copyright (c) 2002 David Shultz.
-	Copyright (c) 2005, 2006 Peter Pentchev.
-	All rights reserved.
-	This program is free software; you can redistribute it
-	and/or modify if under the same terms as Perl itself.
+    Copyright (c) 2002, 2014 David Shultz.
+    Copyright (c) 2005, 2006 Peter Pentchev.
+    All rights reserved.
+    This program is free software; you can redistribute it
+    and/or modify if under the same terms as Perl itself.
 
 =cut
-
-
-
-
-
-
 

@@ -1,6 +1,9 @@
 use ExtUtils::MakeMaker;
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
+print "###############################################################\n";
+print "# This update is NOT compatible with version 0.9 or earlier!! #\n";
+print "###############################################################\n";
 if ($^O =~ /linux/) {
         print "OS: $^O, copying XS file: ";
         system("cp FreeDB.xs.linux FreeDB.xs") && die "Copying failed\n";
@@ -72,12 +75,15 @@ chk_version(CDDB::File => '1.01') or
 WriteMakefile(
     'NAME'              => 'Net::FreeDB',
     'VERSION_FROM'      => 'FreeDB.pm', # finds $VERSION
-    'PREREQ_PM'         => {Net::Cmd => 2.12,
-			    CDDB::File => 1.01,
-			    File::Temp => 0.05,
+    'PREREQ_PM'         => {
+			    Moo              => 0,
+			    CDDB::File       => 1.01,
+			    File::Temp       => 0.05,
+                IO::Socket::INET => 0,
+                Net::Cmd         => 2.12,
 			   }, # e.g., Module::Name => 1.1
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
-      (AUTHOR     => 'David Shultz <dshultz@cpan.org>',
+      (AUTHOR     => 'David Shultz <dshultz@cpan.org>, Peter Pentchev <roam@ringlet.net>',
        ABSTRACT   => 'OOP Interface to FreeDB Server(s)'
       ) : ()),
     'LIBS'              => [''], # e.g., '-lm'

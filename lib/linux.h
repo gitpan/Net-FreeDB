@@ -12,13 +12,14 @@ struct toc {
 } cdtoc[100];
 
 struct discdata {
-    unsigned long discid;
-    int num_of_trks;
-    int track_offsets[100];
-    int seconds;
+    unsigned long   discid;
+    int             num_of_trks;
+    int             track_offsets[100];
+    int             seconds;
 };
 
-unsigned int cddb_sum(int n) {
+unsigned int cddb_sum(int n)
+{
     unsigned int ret;
 
     ret = 0;
@@ -29,20 +30,24 @@ unsigned int cddb_sum(int n) {
     return ret;
 }
 
-unsigned long cddb_discid(int tot_trks) {
-    unsigned int i, t = 0, n = 0;
+unsigned long cddb_discid(int tot_trks)
+{
+    unsigned int i = 0;
+    unsigned int t = 0;
+    unsigned int n = 0;
 
-    i = 0;
     while (i < tot_trks) {
         n = n + cddb_sum((cdtoc[i].min * 60) + cdtoc[i].sec);
         i++;
     }
+
     t = ((cdtoc[tot_trks].min * 60) + cdtoc[tot_trks].sec) -
         ((cdtoc[0].min * 60) + cdtoc[0].sec);
     return ((n % 0xff) << 24 | t << 8 | tot_trks);
 }
 
-struct discdata get_disc_id(char* dev) {
+struct discdata get_disc_id(char* dev)
+{
     struct discdata data;
     int i;
 
@@ -63,65 +68,63 @@ struct discdata get_disc_id(char* dev) {
     return data;
 }
 
-int read_toc(char* dev) {
-    int drive;
+int read_toc(char* dev)
+{
+    int drive, i, status;
     struct cdrom_tochdr tochdr;
     struct cdrom_tocentry tocentry;
-    int i, status;
 
     drive = open(dev, O_RDONLY | O_NONBLOCK);
     if (drive == -1) {
-      //printf("Device Error: %d\n", errno);
-                return(-1);
+        printf("Device Error: %d\n", errno);
+        return(-1);
     }
 
-        status = ioctl(drive, CDROM_DRIVE_STATUS, CDSL_CURRENT);
-        if (status<0) {
-          //printf("Error: Error getting drive status\n");
+    status = ioctl(drive, CDROM_DRIVE_STATUS, CDSL_CURRENT);
+    if (status < 0) {
+        printf("Error: Error getting drive status\n");
+        return(-1);
+    } else {
+        switch(status) {
+            case CDS_DISC_OK:
+                printf("Disc ok, moving on\n");
+                break;
+            case CDS_TRAY_OPEN:
+                printf("Error: Drive reporting tray open...exiting\n");
+                close(drive);
                 return(-1);
-        } else {
-                switch(status) {
-                        case CDS_DISC_OK:
-                                //printf("Disc ok, moving on\n");
-                                break;
-                        case CDS_TRAY_OPEN:
-                                //printf("Error: Drive reporting tray open...exiting\n");
-                                close(drive);
-                                return(-1);
-                        case CDS_DRIVE_NOT_READY:
-                                //printf("Error: Drive Not Ready...exiting\n");
-                                close(drive);
-                                return(-1);
-                        default:
-                                //printf("This shouldn't happen\n");
-                                close(drive);
-                                return(-1);
-                }
+            case CDS_DRIVE_NOT_READY:
+                printf("Error: Drive Not Ready...exiting\n");
+                close(drive);
+                return(-1);
+            default:
+                printf("This shouldn't happen\n");
+                close(drive);
+                return(-1);
         }
-
-
+    }
 
     if (ioctl(drive, CDROMREADTOCHDR, &tochdr) == -1) {
-                switch(errno) {
-                        case EBADF:
-                          //printf("Error: Invalid device...exiting\n");
-                                break;
-                        case EFAULT:
-                          //printf("Error: Memory Write Error...exiting\n");
-                                break;
-                        case ENOTTY:
-                          //printf("Error: Invalid device or Request type...exiting\n");
-                                break;
-                        case EINVAL:
-                          //printf("Error: Invalid REQUEST...exiting\n");
-                                break;
-                        case EAGAIN:
-                          //printf("Error: Drive not ready...exiting\n");
-                                break;
-                        default:
-                          //printf("Error: %d\n", errno);
-				break;
-		}
+        switch(errno) {
+            case EBADF:
+                printf("Error: Invalid device...exiting\n");
+                break;
+            case EFAULT:
+                printf("Error: Memory Write Error...exiting\n");
+                break;
+            case ENOTTY:
+                printf("Error: Invalid device or Request type...exiting\n");
+                break;
+            case EINVAL:
+                printf("Error: Invalid REQUEST...exiting\n");
+                break;
+            case EAGAIN:
+                printf("Error: Drive not ready...exiting\n");
+                break;
+            default:
+                printf("Error: %d\n", errno);
+	    	    break;
+	    }
     }
     
     for (i = tochdr.cdth_trk0; i <= tochdr.cdth_trk1; i++) {
@@ -134,6 +137,7 @@ int read_toc(char* dev) {
         cdtoc[i-1].frame += cdtoc[i-1].min*60*75;
         cdtoc[i-1].frame += cdtoc[i-1].sec*75;
     }
+
     tocentry.cdte_track = 0xAA;
     tocentry.cdte_format = CDROM_MSF;
     ioctl(drive, CDROMREADTOCENTRY, &tocentry);
@@ -143,14 +147,8 @@ int read_toc(char* dev) {
     cdtoc[tochdr.cdth_trk1].frame += cdtoc[tochdr.cdth_trk1].min*60*75;
     cdtoc[tochdr.cdth_trk1].frame += cdtoc[tochdr.cdth_trk1].sec*75;
     close(drive);
+
     return tochdr.cdth_trk1;
 }
 
 #endif //LINUX_H
-
-
-
-
-
-
-
